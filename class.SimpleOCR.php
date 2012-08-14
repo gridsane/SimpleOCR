@@ -7,6 +7,19 @@
  * @license http://www.gnu.org/licenses/gpl.html
  * @version 0.1
  */
+/**
+ * @todo iteration v0.2 features:
+ * - explodeLines body (with avito font tests)
+ * 
+ * @todo iteration v0.3 features:
+ * - automatic teach
+ * - slando font
+ * - Exceptions
+ *
+ * @todo sometime
+ * - improve patternDiff, may be optionally
+ * - do not use convert, or make it optionally
+ */
 
 class SimpleOCR
 {
@@ -15,7 +28,7 @@ class SimpleOCR
 
     /**
      * Initialize class with font
-     * @param  mixed $font array or path to file returns array
+     * @param mixed $font array or path to file returns array
      */
     public function __construct ($font = null)
     {
@@ -36,7 +49,7 @@ class SimpleOCR
         $tempImage = tempnam(sys_get_temp_dir(), 'imageocr');
         $code = 0;
         system("convert {$imagePath} -threshold 70% -trim {$tempImage}", $code);
-        // TODO: exception if code != 0
+        // @todo exception if code != 0
         return $tempImage;
     }
 
@@ -53,9 +66,10 @@ class SimpleOCR
         $height = imagesy($image);
         for ($x = 0; $x < $width; $x++) {
             for ($y = 0; $y < $height; $y++) {
-                $imageArray[$x][$y] = (int)imagecolorat($image, $x, $y);
+                $imageArray[$x][$y] = (int) imagecolorat($image, $x, $y);
             }
         }
+
         return $imageArray;
     }
 
@@ -66,7 +80,7 @@ class SimpleOCR
      */
     private function explodeLines (&$imageArray)
     {
-        // TODO: реализация
+        // @todo реализация
         return array($imageArray);
     }
 
@@ -106,6 +120,7 @@ class SimpleOCR
                 }
             }
         }
+
         return $pattern;
     }
 
@@ -116,7 +131,7 @@ class SimpleOCR
      */
     private function explodePattern (&$lineArray)
     {
-        // TODO: считать количество разделителей
+        // @todo считать количество разделителей
         // и если нужно ставить пробелы
         $chars = array();
         $width = count($lineArray);
@@ -139,14 +154,15 @@ class SimpleOCR
                 $currentChar[] = $lineArray[$x];
             }
         }
+
         return $chars;
     }
 
     /**
      * Calculate the difference between two patterns
      * 0 - is no differnce and so on
-     * @param  array $pattern1
-     * @param  array $pattern2
+     * @param  array   $pattern1
+     * @param  array   $pattern2
      * @return integer
      */
     private function patternDiff (&$pattern1, &$pattern2)
@@ -157,13 +173,14 @@ class SimpleOCR
                 $result += abs($pattern1[$i] - $pattern2[$i]);
             }
         }
+
         return $result;
     }
 
     /**
      * Recognize pattern
      * (counts smallest difference between font patterns)
-     * @param  array $targetPattern pattern to recognize
+     * @param  array  $targetPattern pattern to recognize
      * @return string a single pattern-based character
      */
     private function recognize (&$targetPattern)
@@ -180,6 +197,7 @@ class SimpleOCR
                 }
             }
         }
+
         return $result;
     }
 
@@ -199,9 +217,10 @@ class SimpleOCR
             foreach ($chars as $char) {
                 $text .= $this->recognize($char);
             }
-            // TODO: fix last line emptiness
+            // @todo fix last line emptiness
             $text .= "\n";
         }
+
         return $text;
     }
 }
