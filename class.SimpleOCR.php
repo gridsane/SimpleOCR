@@ -8,9 +8,6 @@
  * @version 0.1
  */
 /**
- * @todo iteration v0.2 features:
- * - explodeLines body (with avito font tests)
- * 
  * @todo iteration v0.3 features:
  * - automatic teach
  * - slando font
@@ -80,8 +77,36 @@ class SimpleOCR
      */
     private function explodeLines (&$imageArray)
     {
-        // @todo реализация
-        return array($imageArray);
+        // @todo optimization!
+        $lines = array();
+        $width = count($imageArray);
+        $height = count($imageArray[0]);
+        $lastY = 0;
+        for ($y = 0; $y < $height; $y++) { 
+            $isEmptyLine = true;
+            for ($x = 0; $x < $width; $x++) { 
+                $color = $imageArray[$x][$y];
+                if($color == 0) {
+                    $isEmptyLine = false;
+                    break;
+                }
+            }
+            if($isEmptyLine || ($y+1) == $height) {
+                // don't ignore last non-empty line
+                $maxY = (($y+1) == $height) ? $height : $y;
+                $part = array(array());
+                for ($dx = 0; $dx < $width; $dx++) {
+                    for ($dy = $lastY, $ay = 0; $dy < $maxY; $dy++, $ay++) {
+                        $part[$dx][$ay] = $imageArray[$dx][$dy];
+                    }
+                }
+                if(($y - $lastY) > 1) {
+                    $lines[] = $part;
+                }
+                $lastY = $y+1;
+            }
+        }
+        return $lines;
     }
 
     /**
@@ -145,7 +170,7 @@ class SimpleOCR
                     break;
                 }
             }
-            if ($isVertLine) {
+            if ($isVertLine || ($x+1) == $width) {
                 if (count($currentChar) > 0) {
                     $chars[] = $this->getPattern($currentChar);
                 }
