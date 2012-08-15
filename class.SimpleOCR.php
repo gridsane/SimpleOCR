@@ -5,15 +5,17 @@
  * Recognize a text, based on known font.
  * @author gridsane <gridsane@gmail.com>
  * @license http://www.gnu.org/licenses/gpl.html
- * @version 0.1
+ * @version 0.3
  */
+
 /**
- * @todo iteration v0.3 features:
- * - automatic teach
- * - slando font
- * - Exceptions
- *
+ * @todo v0.4
+ * - smart teach (beautify exists implementation)
+ * - add class settings (accuracy, new lines and etc.)
+ * 
  * @todo sometime
+ * - optimization!?
+ * - Exceptions
  * - improve patternDiff, may be optionally
  * - do not use convert, or make it optionally
  */
@@ -75,7 +77,7 @@ class SimpleOCR
      * @param  array $imageArray array of colors (0 or 1 is ideal)
      * @return array trimmed lines
      */
-    private function explodeLines (&$imageArray)
+    private function explodeLines (&$imageArray, $accuracy=0)
     {
         // @todo optimization!
         $lines = array();
@@ -83,12 +85,17 @@ class SimpleOCR
         $height = count($imageArray[0]);
         $lastY = 0;
         for ($y = 0; $y < $height; $y++) { 
+            $curLinePixels = 0;
             $isEmptyLine = true;
             for ($x = 0; $x < $width; $x++) { 
                 $color = $imageArray[$x][$y];
                 if($color == 0) {
-                    $isEmptyLine = false;
-                    break;
+                    if($curLinePixels < $accuracy) {
+                        $curLinePixels++;
+                    } else {
+                        $isEmptyLine = false;
+                        break;
+                    }
                 }
             }
             if($isEmptyLine || ($y+1) == $height) {
@@ -100,7 +107,7 @@ class SimpleOCR
                         $part[$dx][$ay] = $imageArray[$dx][$dy];
                     }
                 }
-                if(($y - $lastY) > 1) {
+                if(($y - $lastY) >= 1) {
                     $lines[] = $part;
                 }
                 $lastY = $y+1;
@@ -171,8 +178,48 @@ class SimpleOCR
                 }
             }
             if ($isVertLine || ($x+1) == $width) {
+                if(($x+1) == $width && $isVertLine == false) {
+                    $currentChar[] = $lineArray[$x];
+                }
                 if (count($currentChar) > 0) {
                     $chars[] = $this->getPattern($currentChar);
+                }
+                $currentChar = array();
+            } else {
+                $currentChar[] = $lineArray[$x];
+            }
+        }
+
+        return $chars;
+    }
+
+    /**
+     * Explodes line to an array of character
+     * @param  array $lineArray single-line array
+     * @return array patterns
+     */
+    private function explodeChars (&$lineArray)
+    {
+        // @todo считать количество разделителей
+        // и если нужно ставить пробелы
+        $chars = array();
+        $width = count($lineArray);
+        $height = count($lineArray[0]);
+        $currentChar = array();
+        for ($x = 0; $x < $width; $x++) {
+            $isVertLine = true;
+            for ($y = 0; $y < $height; $y++) {
+                if ($lineArray[$x][$y] == 0) {
+                    $isVertLine = false;
+                    break;
+                }
+            }
+            if ($isVertLine || ($x+1) == $width) {
+                if(($x+1) == $width && $isVertLine == false) {
+                    $currentChar[] = $lineArray[$x];
+                }
+                if (count($currentChar) > 0) {
+                    $chars[] = $currentChar;
                 }
                 $currentChar = array();
             } else {
@@ -198,7 +245,6 @@ class SimpleOCR
                 $result += abs($pattern1[$i] - $pattern2[$i]);
             }
         }
-
         return $result;
     }
 
@@ -214,7 +260,7 @@ class SimpleOCR
         $result = '';
         foreach ($this->font as $char => $pattern) {
             $diff = $this->patternDiff($targetPattern, $pattern);
-            if ($minDiff < 0 || $minDiff > $diff) {
+            if ($minDiff < 0 || $minDiff >= $diff) {
                 $minDiff = $diff;
                 $result = $char;
                 if ($diff == 0) {
@@ -222,30 +268,141 @@ class SimpleOCR
                 }
             }
         }
-
+        if($minDiff > 2) {
+            print_r($targetPattern);
+            $result = "";
+        }
+        // if($minDiff != 0) echo "\n(($minDiff)) ".print_r($targetPattern)."\n";
         return $result;
     }
 
     /**
      * Convert image to string, based on preload "font" patterns
-     * @param  string $imagePath path to target image
-     * @return string recognized text (if there are many lines in image, it also has new lines)
+     * @param  string  $imagePath    path to target image
+     * @param  boolean $trim         trim each character for more clever work (slower)
+     * @param  boolean $skipNewLines draw \n after each line
+     * @return string recognized text
      */
-    public function execute ($imagePath)
+    public function execute ($imagePath, $trim=false, $skipNewLines=true)
     {
         $image = $this->imageSharp($imagePath);
         $imageArray = $this->imageToArray($image);
         $text = "";
-        $lines = $this->explodeLines($imageArray);
+        $lines = $this->explodeLines($imageArray, 1);
         foreach ($lines as $line) {
-            $chars = $this->explodePattern($line);
+            $chars = $this->explodeChars($line);
             foreach ($chars as $char) {
+                if($trim) {
+                    $trimmedChar = $this->explodeLines($char);
+                    if(count($trimmedChar) == 0) {
+                        continue;
+                    }
+                    $char = $trimmedChar[0];
+                }
+                $char = $this->getPattern($char);
                 $text .= $this->recognize($char);
             }
-            // @todo fix last line emptiness
-            $text .= "\n";
+            if(!$skipNewLines) {
+                $text .= "\n";
+            }
         }
-
-        return $text;
+        return rtrim($text);
     }
+
+    /**
+     * Saves font array to file
+     * @param  array  $font     array of font patterns
+     * @param  string $fontFile target file, if exists, merge with $font var
+     * @return boolean          file_put_contents result
+     */
+    private function saveFont ($font, $fontFile="default.font")
+    {
+        if(is_file($fontFile)) {
+            $fontFileArray = include($fontFile);
+        } else {
+            $fontFileArray = array();
+        }
+        // merge with already saved font
+        $fontNewArray = array_merge($fontFileArray, $font);
+        $fontExport = var_export($fontNewArray, true);
+        // ut8 entities fix
+        $fontExport = mb_convert_encoding($fontExport, "UTF-8", "HTML-ENTITIES");
+        // clean whitespace and unnessesary symbols
+        $fontExport = preg_replace("/\s+/", "", $fontExport);
+        $fontExport = preg_replace("/,\)/", ")", $fontExport);
+        $fontExport = preg_replace("/\d=>(\d+)/", "\\1", $fontExport);
+        $fontExport = preg_replace("/(\d+)=>array/", "'\\1'=>array", $fontExport);
+        $fontExport = "<?php return ".$fontExport.";";
+        return file_put_contents($fontFile, $fontExport);
+    }
+
+    /**
+     * Per-pixel draws character (ASCII or smthg)
+     * @param  array  $char  character array
+     * @param  string $white represents whitespace (background of character)
+     * @param  string $black represents dark non-empty pixels
+     * @return void
+     */
+    private function drawChar ($char, $white="&nbsp", $black="<b>&diams;</b>")
+    {
+        $w = count($char);
+        $h = count($char[0]);
+        echo "<pre style='font-size: 0.5em;'>";
+        for($y = 0; $y < $h; $y++) {
+            for($x = 0; $x < $w; $x++) {
+                $c = $char[$x][$y];
+                echo $c ? "$white" : "$black";
+            }
+            echo "<br/>";
+        }
+        echo "</pre>";
+    }
+
+    /**
+     * @todo   DIRTY function, think about clever teach realization
+     * Traces the image and waiting for POST with 
+     * human-recognized characters. If POST exists,
+     * copy calculated patterns to $fontFile
+     * @param  string $imagePath
+     * @param  string $fontFile  file to store font data
+     * @return void
+     */
+    public function teach ($imagePath, $fontFile="default.font")
+    {
+        $image = $this->imageSharp($imagePath);
+        $imageArray = $this->imageToArray($image);
+        $lines = $this->explodeLines($imageArray, 1);
+        $chars = array();
+        $font = array();
+        echo "<form method='POST'>";
+        echo "<table>";
+        echo "<input type=submit />";
+        foreach ($lines as $lkey => $line) {
+            $characters = $this->explodeChars($line);
+            foreach ($characters as $ckey => $char) {
+                $trimmedChar = $this->explodeLines($char);
+                $char = $trimmedChar[0];
+                if(isset($_POST['char'])) {
+                    if(!empty($_POST['char'][$lkey][$ckey])) {
+                        $fontChar = $_POST['char'][$lkey][$ckey];
+                        $font[$fontChar] = $this->getPattern($char);
+                    }
+                } else {
+                    $chars[] = $char;
+                    echo "<tr><td style='border:1px solid #ccc; padding:10px'>";
+                    $this->drawChar($char);
+                    echo "</td><td>"; 
+                    echo "<input type='text' name='char[$lkey][$ckey]' />";
+                    echo "</td></tr>";
+                }
+            }
+        }
+        echo "</table>";
+        echo "<input type=submit />";
+        echo "</form>";
+        if(isset($_POST['char'])) {
+            $this->saveFont($font, $fontFile);
+        }
+    }
+
 }

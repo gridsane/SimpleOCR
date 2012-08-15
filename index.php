@@ -3,8 +3,11 @@
 echo "<pre>"; 
 require_once("class.SimpleOCR.php");
 
-$ocr = new SimpleOCR("avito.font");
-$text = $ocr->execute($_SERVER["DOCUMENT_ROOT"]."testimg/e9721dbec6d15a3146f6cbc95fcb54ea.png");
+$ocr = new SimpleOCR ("slando.font");
+for ($i=0; $i < 14; $i++) { 
+    $text = $ocr->execute($_SERVER["DOCUMENT_ROOT"]."testimg/slando/$i.png", true);
+    echo "<img src='testimg/slando/$i.png' /><br/>\n";
+    echo $text."\n\n\n";
+}
 
-print_r($text);
 echo "</pre>";
